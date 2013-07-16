@@ -110,6 +110,61 @@ def check_levels(param, warning, critical, message, ok=[]):
         return 2
 
 
+#
+# Basically a big case statement. This could be cleverly re-written by converting to orders of magnitude
+# and applying multiplication / division of 1024 the correct number of times, but meh.
+#
+def convert_units(original, target, amount):
+    if (original == 'B'):
+        if (target == 'KB'):
+            return amount / 1024.0
+        elif (target == 'MB'):
+            return amount / 1024.0 / 1024.0
+        elif (target == 'GB'):
+            return amount / 1024.0 / 1024.0 / 1024.0
+        elif (target == 'TB'):
+            return amount / 1024.0 / 1024.0 / 1024.0 / 1024.0
+    elif (target == 'KB'):
+        if (target == 'B'):
+            return amount * 1024.0
+        elif (target == 'MB'):
+            return amount / 1024.0
+        elif (target == 'GB'):
+            return amount / 1024.0 / 1024.0
+        elif (target == 'TB'):
+            return amount / 1024.0 / 1024.0 / 1024.0
+    elif (target == 'MB'):
+        if (target == 'B'):
+            return amount * 1024.0 * 1024.0
+        elif (target == 'KB'):
+            return amount * 1024.0
+        elif (target == 'GB'):
+            return amount / 1024.0
+        elif (target == 'TB'):
+            return amount / 1024.0 / 1024.0
+    elif (target == 'GB'):
+        if (target == 'B'):
+            return amount * 1024.0 * 1024.0 * 1024.0
+        elif (target == 'KB'):
+            return amount * 1024.0 * 1024.0
+        elif (target == 'MB'):
+            return amount * 1024.0
+        elif (target == 'TB'):
+            return amount / 1024.0
+    elif (target == 'TB'):
+        if (target == 'B'):
+            return amount * 1024.0 * 1024.0 * 1024.0 * 1024.0
+        elif (target == 'KB'):
+            return amount * 1024.0 * 1024.0 * 1024.0
+        elif (target == 'MB'):
+            return amount * 1024.0 * 1024.0
+        elif (target == 'GB'):
+            return amount * 1024.0
+     
+     # Same units or unrecognized prefix
+     return amount
+
+
 def get_server_status(con):
     try:
         set_read_preference(con.admin)
@@ -143,6 +198,8 @@ def main(argv):
     p.add_option('-q', '--querytype', action='store', dest='query_type', default='query', help='The query type to check [query|insert|update|delete|getmore|command] from queries_per_second')
     p.add_option('-c', '--collection', action='store', dest='collection', default='admin', help='Specify the collection to check')
     p.add_option('-T', '--time', action='store', type='int', dest='sample_time', default=1, help='Time used to sample number of pages faults')
+    p.add_option('--memory-unit', action='store', type='string', dest='memory_unit', default ='GB', help='The unit of measure to use for memory-related checks, such as RAM usage')
+    p.add_option('--storage-unit', action='store', type='string', dest='storage_unit', default='MB', help='The unit of measure to use for storage-related checks, such as database size'
 
     options, arguments = p.parse_args()
     host = options.host
@@ -191,9 +248,9 @@ def main(argv):
     elif action == "replset_state":
         return check_replset_state(con, perf_data, warning, critical)
     elif action == "memory":
-        return check_memory(con, warning, critical, perf_data, options.mapped_memory)
+        return check_memory(con, warning, critical, perf_data, options.mapped_memory, options.memory_unit)
     elif action == "memory_mapped":
-        return check_memory_mapped(con, warning, critical, perf_data)
+        return check_memory_mapped(con, warning, critical, perf_data, options.memory_unit)
     elif action == "queues":
         return check_queues(con, warning, critical, perf_data)
     elif action == "lock":
@@ -216,9 +273,9 @@ def main(argv):
         return check_journal_commits_in_wl(con, warning, critical, perf_data)
     elif action == "database_size":
         if options.all_databases:
-            return check_all_databases_size(con, warning, critical, perf_data)
+            return check_all_databases_size(con, warning, critical, perf_data, options.storage_unit)
         else:
-            return check_database_size(con, database, warning, critical, perf_data)
+            return check_database_size(con, database, warning, critical, perf_data, options.storage_unit)
     elif action == "journaled":
         return check_journaled(con, warning, critical, perf_data)
     elif action == "write_data_files":
@@ -485,7 +542,7 @@ def check_rep_lag(con, host, warning, critical, percent, perf_data, max_lag, use
         return exit_with_general_critical(e)
 
 
-def check_memory(con, warning, critical, perf_data, mapped_memory):
+def check_memory(con, warning, critical, perf_data, mapped_memory, memory_unit):
     #
     # These thresholds are basically meaningless, and must be customized to your system's ram
     #
@@ -497,30 +554,30 @@ def check_memory(con, warning, critical, perf_data, mapped_memory):
             print "OK - Platform not supported for memory info"
             return 0
         #
-        # convert to gigs
+        # convert to gigs (default is megs)
         #
         message = "Memory Usage:"
         try:
-            mem_resident = float(data['mem']['resident']) / 1024.0
-            message += " %.2fGB resident," % (mem_resident)
+            mem_resident = convert_units('MB', memory_unit, float(data['mem']['resident']))
+            message += " %.2f %s resident," % (mem_resident, memory_unit)
         except:
             mem_resident = 0
             message += " resident unsupported,"
         try:
-            mem_virtual = float(data['mem']['virtual']) / 1024.0
-            message += " %.2fGB virtual," % mem_virtual
+            mem_virtual = convert_units('MB', memory_unit, float(data['mem']['virtual']))
+            message += " %.2f %s virtual," % (mem_virtual, memory_unit)
         except:
             mem_virtual = 0
             message += " virtual unsupported,"
         try:
-            mem_mapped = float(data['mem']['mapped']) / 1024.0
-            message += " %.2fGB mapped," % mem_mapped
+            mem_mapped = convert_units('MB', memory_unit, float(data['mem']['mapped']))
+            message += " %.2f %s mapped," % (mem_mapped, memory_unit)
         except:
             mem_mapped = 0
             message += " mapped unsupported,"
         try:
-            mem_mapped_journal = float(data['mem']['mappedWithJournal']) / 1024.0
-            message += " %.2fGB mappedWithJournal" % mem_mapped_journal
+            mem_mapped_journal = convert_units('MB', memory_unit, float(data['mem']['mappedWithJournal']))
+            message += " %.2f %s mappedWithJournal" % (mem_mapped_journal, memory_unit)
         except:
             mem_mapped_journal = 0
         message += performance_data(perf_data, [("%.2f" % mem_resident, "memory_usage", warning, critical),
@@ -535,7 +592,7 @@ def check_memory(con, warning, critical, perf_data, mapped_memory):
         return exit_with_general_critical(e)
 
 
-def check_memory_mapped(con, warning, critical, perf_data):
+def check_memory_mapped(con, warning, critical, perf_data, memory_unit):
     #
     # These thresholds are basically meaningless, and must be customized to your application
     #
@@ -551,14 +608,14 @@ def check_memory_mapped(con, warning, critical, perf_data):
         #
         message = "Memory Usage:"
         try:
-            mem_mapped = float(data['mem']['mapped']) / 1024.0
-            message += " %.2fGB mapped," % mem_mapped
+            mem_mapped = convert_units('MB', memory_unit, float(data['mem']['mapped']))
+            message += " %.2f %s mapped," % mem_mapped, memory_unit)
         except:
             mem_mapped = -1
             message += " mapped unsupported,"
         try:
-            mem_mapped_journal = float(data['mem']['mappedWithJournal']) / 1024.0
-            message += " %.2fGB mappedWithJournal" % mem_mapped_journal
+            mem_mapped_journal = convert_units('MB', memory_unit, float(data['mem']['mappedWithJournal']))
+            message += " %.2f %s mappedWithJournal" % mem_mapped_journal, memory_unit)
         except:
             mem_mapped_journal = 0
         message += performance_data(perf_data, [("%.2f" % mem_mapped, "memory_mapped"), ("%.2f" % mem_mapped_journal, "mappedWithJournal")])
@@ -731,7 +788,7 @@ def check_collections(con, warning, critical, perf_data=None):
         return exit_with_general_critical(e)
 
 
-def check_all_databases_size(con, warning, critical, perf_data):
+def check_all_databases_size(con, warning, critical, perf_data, storage_unit):
     warning = warning or 100
     critical = critical or 1000
     try:
@@ -746,25 +803,25 @@ def check_all_databases_size(con, warning, critical, perf_data):
     for db in all_dbs_data['databases']:
         database = db['name']
         data = con[database].command('dbstats')
-        storage_size = round(data['storageSize'] / 1024 / 1024, 1)
-        message += "; Database %s size: %.0f MB" % (database, storage_size)
+        storage_size = convert_units('B', storage_unit, data['storageSize'])
+        message += "; Database %s size: %.0f %s" % (database, storage_size, storage_unit)
         perf_data_param.append((storage_size, database + "_database_size"))
         total_storage_size += storage_size
 
     perf_data_param[0] = (total_storage_size, "total_size", warning, critical)
     message += performance_data(perf_data, perf_data_param)
-    message = "Total size: %.0f MB" % total_storage_size + message
+    message = "Total size: %.0f %s" % (total_storage_size, storage_unit) + message
     return check_levels(total_storage_size, warning, critical, message)
 
 
-def check_database_size(con, database, warning, critical, perf_data):
+def check_database_size(con, database, warning, critical, perf_data, storage_unit):
     warning = warning or 100
     critical = critical or 1000
     perfdata = ""
     try:
         set_read_preference(con.admin)
         data = con[database].command('dbstats')
-        storage_size = data['storageSize'] / 1024 / 1024
+        storage_size = convert_units('B', storage_unit, data['storageSize'])
         if perf_data:
             perfdata += " | database_size=%i;%i;%i" % (storage_size, warning, critical)
             #perfdata += " database=%s" %(database)
