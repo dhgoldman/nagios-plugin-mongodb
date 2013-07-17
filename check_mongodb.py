@@ -161,8 +161,8 @@ def convert_units(original, target, amount):
         elif (target == 'GB'):
             return amount * 1024.0
      
-     # Same units or unrecognized prefix
-     return amount
+    # Same units or unrecognized prefix
+    return amount
 
 
 def get_server_status(con):
@@ -199,7 +199,7 @@ def main(argv):
     p.add_option('-c', '--collection', action='store', dest='collection', default='admin', help='Specify the collection to check')
     p.add_option('-T', '--time', action='store', type='int', dest='sample_time', default=1, help='Time used to sample number of pages faults')
     p.add_option('--memory-unit', action='store', type='string', dest='memory_unit', default ='GB', help='The unit of measure to use for memory-related checks, such as RAM usage')
-    p.add_option('--storage-unit', action='store', type='string', dest='storage_unit', default='MB', help='The unit of measure to use for storage-related checks, such as database size'
+    p.add_option('--storage-unit', action='store', type='string', dest='storage_unit', default='MB', help='The unit of measure to use for storage-related checks, such as database size')
 
     options, arguments = p.parse_args()
     host = options.host
@@ -609,13 +609,13 @@ def check_memory_mapped(con, warning, critical, perf_data, memory_unit):
         message = "Memory Usage:"
         try:
             mem_mapped = convert_units('MB', memory_unit, float(data['mem']['mapped']))
-            message += " %.2f %s mapped," % mem_mapped, memory_unit)
+            message += " %.2f %s mapped," % mem_mapped, memory_unit
         except:
             mem_mapped = -1
             message += " mapped unsupported,"
         try:
             mem_mapped_journal = convert_units('MB', memory_unit, float(data['mem']['mappedWithJournal']))
-            message += " %.2f %s mappedWithJournal" % mem_mapped_journal, memory_unit)
+            message += " %.2f %s mappedWithJournal" % mem_mapped_journal, memory_unit
         except:
             mem_mapped_journal = 0
         message += performance_data(perf_data, [("%.2f" % mem_mapped, "memory_mapped"), ("%.2f" % mem_mapped_journal, "mappedWithJournal")])
